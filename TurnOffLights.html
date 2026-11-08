@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Turn Off the Lights</title>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ===== CONFIG (visual) ===== */
+  :root{
+    --bg:#0d1017; --panel:#161a24; --ink:#e9e4d8; --muted:#8a8f9c;
+    --lit:#ffd98a; --lit-core:#fff4d6; --glow:rgba(255,206,110,.55);
+    --dark:#1b1f2a; --dark-edge:#262b38; --accent:#ffc861;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(ellipse at 50% -10%,#1d2333 0%,var(--bg) 60%);
+    color:var(--ink);font-family:Quicksand,system-ui,sans-serif;
+    display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px 12px 32px;
+    user-select:none;
+  }
+  h1{font-weight:700;letter-spacing:.06em;font-size:clamp(22px,5vw,32px);margin:6px 0 2px}
+  h1 span{color:var(--accent);text-shadow:0 0 18px var(--glow)}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 16px;text-align:center}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px}
+  .stat{background:var(--panel);border:1px solid #232838;border-radius:12px;padding:8px 14px;min-width:78px;text-align:center}
+  .stat b{display:block;font-size:20px}
+  .stat small{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+  .board-wrap{position:relative}
+  #board{
+    display:grid;gap:clamp(5px,1.4vw,9px);padding:clamp(10px,2.5vw,16px);
+    background:var(--panel);border-radius:20px;border:1px solid #232838;
+    box-shadow:0 20px 60px rgba(0,0,0,.45);
+    width:min(92vw,480px);aspect-ratio:1;
+  }
+  .cell{
+    position:relative;border:none;border-radius:28%;cursor:pointer;padding:0;
+    transition:background .35s ease, box-shadow .35s ease, transform .12s ease;
+  }
+  .cell:active{transform:scale(.92)}
+  .cell.on{
+    background:radial-gradient(circle at 50% 42%,var(--lit-core) 0%,var(--lit) 45%,#e9a94a 100%);
+    box-shadow:0 0 18px var(--glow),inset 0 -4px 10px rgba(180,110,30,.35);
+  }
+  .cell.off{
+    background:radial-gradient(circle at 50% 40%,var(--dark-edge) 0%,var(--dark) 70%);
+    box-shadow:inset 0 3px 8px rgba(0,0,0,.6);
+  }
+  .cell.hint::after{
+    content:"";position:absolute;inset:-4px;border-radius:30%;
+    border:2px solid #9ad8ff;animation:pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse{50%{opacity:.25;transform:scale(1.06)}}
+  .bubble{
+    position:absolute;left:50%;top:50%;width:100%;height:100%;border-radius:50%;
+    border:2px solid rgba(255,230,170,.8);transform:translate(-50%,-50%) scale(.3);
+    pointer-events:none;animation:pop .45s ease-out forwards;
+  }
+  @keyframes pop{to{transform:translate(-50%,-50%) scale(1.5);opacity:0;border-width:0}}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:16px}
+  button.btn,select{
+    font-family:inherit;font-weight:600;font-size:14px;color:var(--ink);
+    background:#222838;border:1px solid #2f3648;border-radius:10px;padding:9px 14px;cursor:pointer;
+  }
+  button.btn:hover,select:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#2a1d05;border-color:var(--accent)}
+  .overlay{
+    position:absolute;inset:0;border-radius:20px;display:none;flex-direction:column;
+    align-items:center;justify-content:center;gap:10px;background:rgba(8,10,15,.86);
+    backdrop-filter:blur(3px);text-align:center;padding:20px;
+  }
+  .overlay.show{display:flex;animation:fade .5s ease}
+  @keyframes fade{from{opacity:0}}
+  .overlay h2{margin:0;font-size:28px}
+  .overlay p{margin:0;color:var(--muted)}
+  .moon{font-size:46px;filter:drop-shadow(0 0 14px rgba(160,200,255,.5))}
+  #roomInput{font-family:inherit;font-size:14px;color:var(--ink);background:#11141c;border:1px solid #2f3648;
+    border-radius:10px;padding:9px 12px;width:200px;text-transform:uppercase}
+  a.btn{text-decoration:none;display:inline-block}
+  #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--accent);color:#2a1d05;
+    font-weight:700;padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .3s;pointer-events:none}
+  #toast.show{opacity:1}
+  .how{max-width:480px;color:var(--muted);font-size:13px;line-height:1.55;margin-top:18px;text-align:center}
+</style>
+</head>
+<body>
+  <h1>Turn Off the <span>Lights</span></h1>
+  <p class="sub">Tap a light to flip it and its four neighbours. Make the whole room dark.</p>
+
+  <div class="bar">
+    <div class="stat"><b id="moves">0</b><small>Moves</small></div>
+    <div class="stat"><b id="par">–</b><small>Par</small></div>
+    <div class="stat"><b id="time">0:00</b><small>Time</small></div>
+    <div class="stat"><b id="best">–</b><small>Best</small></div>
+  </div>
+
+  <div class="board-wrap">
+    <div id="board"></div>
+    <div class="overlay" id="win">
+      <div class="moon">🌙</div>
+      <h2>Lights out!</h2>
+      <p id="winText"></p>
+      <div class="controls" style="margin-top:4px">
+        <button class="btn" id="copyWin">📋 Copy challenge</button>
+        <a class="btn" id="xWin" href="#" target="_blank" rel="noopener">Post on X</a>
+      </div>
+      <button class="btn primary" id="again">Next room</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <select id="size" aria-label="Grid size">
+      <option value="6" selected>6 × 6 · Normal</option>
+      <option value="9">9 × 9 · Difficult</option>
+      <option value="13">13 × 13 · Very difficult</option>
+      <option value="19">19 × 19 · Nightmare</option>
+    </select>
+    <button class="btn primary" id="newBtn">New room</button>
+    <button class="btn" id="resetBtn">Restart</button>
+    <button class="btn" id="hintBtn">Hint</button>
+    <button class="btn" id="soundBtn">🔊</button>
+  </div>
+
+  <div class="controls">
+    <span class="stat" style="padding:9px 14px">Room <b id="roomId" style="display:inline;font-size:16px;letter-spacing:.08em"></b></span>
+    <input id="roomInput" placeholder="Enter room ID e.g. 9-K7QX2M" maxlength="12" autocomplete="off">
+    <button class="btn" id="playIdBtn">Play ID</button>
+    <button class="btn" id="dailyBtn">📅 Daily room</button>
+    <button class="btn" id="shareBtn">🏆 Challenge a friend</button>
+  </div>
+  <div id="toast"></div>
+
+  <p class="how">Each room starts with a few random dark spots; the rest glow softly. Tapping a tile toggles it and its N, E, S, W neighbours — lit ones go dark with a pop, dark ones light back up. Every room is guaranteed solvable. <b>Par</b> is the fewest moves possible.<br>Every room has an ID — share it (or the link) and friends get the exact same board. The <b>Daily room</b> is the same for everyone worldwide each day (UTC).</p>
+
+<script>
+/* ===== CONFIG (game) ===== */
+const CONFIG = {
+  darkFraction: [0.20, 0.40],                  // target share of tiles that start dark
+  minPar: { 6: 6, 9: 12, 13: 25, 19: 50 },     // reject rooms that are too easy
+  boardPx: { 6: 480, 9: 560, 13: 660, 19: 760 }, // max board width per size
+  gapPx:   { 6: 9, 9: 6, 13: 4, 19: 3 },
+  maxGenTries: 200,
+  sizes: [6, 9, 13, 19],
+  idAlphabet: '23456789ABCDEFGHJKLMNPQRSTUVWXYZ', // 32 chars, no 0/O/1/I confusion
+  idLen: 6,                                        // 32^6 ≈ 1.07 billion rooms per size
+  gameName: 'Turn Off the Lights'
+};
+
+/* ===== SEEDED RANDOM (same ID → same room on every device) ===== */
+function mulberry32(a) {
+  return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const randomCode = () => Array.from({ length: CONFIG.idLen }, () => CONFIG.idAlphabet[Math.floor(Math.random() * 32)]).join('');
+const codeToSeed = code => [...code].reduce((s, ch) => s * 32 + CONFIG.idAlphabet.indexOf(ch), 0);
+function parseId(raw) {                       // "9-K7QX2M" → {n, code} or null
+  const m = String(raw || '').trim().toUpperCase().match(/^(\d{1,2})-([2-9A-HJ-NP-Z]{6})$/);
+  return m && CONFIG.sizes.includes(+m[1]) ? { n: +m[1], code: m[2] } : null;
+}
+function dailyCode() {                        // same code worldwide for the UTC date
+  const d = new Date().toISOString().slice(0, 10);
+  let h = 2166136261; for (const c of d) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  const r = mulberry32(h >>> 0);
+  return Array.from({ length: CONFIG.idLen }, () => CONFIG.idAlphabet[Math.floor(r() * 32)]).join('');
+}
+
+/* ===== STATE ===== */
+let N = 6, roomId = '', isDaily = false, hintsUsed = 0, grid = [], start = [], moves = 0, par = 0, t0 = 0, timer = null, done = false, sound = true;
+const $ = id => document.getElementById(id);
+const boardEl = $('board');
+
+/* ===== GF(2) SOLVER ===== */
+// Returns the minimum-press solution (array of 0/1) that turns every light off, or null.
+// Bitset Gaussian elimination + Gray-code search over the null space (19×19 has 2^16 solutions).
+const popc = v => { v -= (v >>> 1) & 0x55555555; v = (v & 0x33333333) + ((v >>> 2) & 0x33333333); return (((v + (v >>> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24; };
+const getBit = (a, k) => (a[k >>> 5] >>> (k & 31)) & 1;
+function solve(state, n) {
+  const m = n * n, W = (m + 32) >>> 5, A = [];
+  const set = (a, k) => a[k >>> 5] |= 1 << (k & 31);
+  for (let i = 0; i < m; i++) {
+    const r = new Uint32Array(W), y = (i / n) | 0, x = i % n;
+    set(r, i);
+    if (y > 0) set(r, i - n); if (y < n - 1) set(r, i + n);
+    if (x > 0) set(r, i - 1); if (x < n - 1) set(r, i + 1);
+    if (state[i]) set(r, m);
+    A.push(r);
+  }
+  const pivCol = [], isPiv = new Uint8Array(m);
+  let row = 0;
+  for (let c = 0; c < m && row < m; c++) {
+    let p = row; while (p < m && !getBit(A[p], c)) p++;
+    if (p === m) continue;
+    [A[row], A[p]] = [A[p], A[row]];
+    const P = A[row];
+    for (let r = 0; r < m; r++) if (r !== row && getBit(A[r], c)) { const R = A[r]; for (let k = c >>> 5; k < W; k++) R[k] ^= P[k]; }
+    pivCol.push(c); isPiv[c] = 1; row++;
+  }
+  for (let r = row; r < m; r++) if (getBit(A[r], m)) return null; // inconsistent
+  const Wx = (m + 31) >>> 5, x0 = new Uint32Array(Wx), basis = [];
+  for (let r = 0; r < row; r++) if (getBit(A[r], m)) set(x0, pivCol[r]);
+  for (let f = 0; f < m; f++) {
+    if (isPiv[f]) continue;
+    const v = new Uint32Array(Wx); set(v, f);
+    for (let r = 0; r < row; r++) if (getBit(A[r], f)) set(v, pivCol[r]);
+    basis.push(v);
+  }
+  const cur = x0.slice(), cnt = a => { let s = 0; for (let k = 0; k < Wx; k++) s += popc(a[k]); return s; };
+  let best = cur.slice(), bestCnt = cnt(cur);
+  for (let g = 1; g < (1 << basis.length); g++) {     // Gray code: flip one basis vector per step
+    const v = basis[31 - Math.clz32(g & -g)];
+    for (let k = 0; k < Wx; k++) cur[k] ^= v[k];
+    const c = cnt(cur);
+    if (c < bestCnt) { bestCnt = c; best = cur.slice(); }
+  }
+  const out = new Uint8Array(m); for (let i = 0; i < m; i++) out[i] = getBit(best, i);
+  return out;
+}
+
+/* ===== ROOM GENERATION ===== */
+// Dark spots are random plus-shaped clusters stamped onto an all-lit room. The all-lit room is
+// always solvable (Sutner's theorem) and each stamp is a legal move, so every room is solvable —
+// this matters for 9×9 and 19×19, where most purely random patterns have no solution.
+function generate(n, code) {
+  const m = n * n, rnd = mulberry32((codeToSeed(code) ^ Math.imul(n, 0x9E3779B1)) >>> 0);
+  let fallback = null;
+  for (let t = 0; t < CONFIG.maxGenTries; t++) {
+    const f = CONFIG.darkFraction[0] + rnd() * (CONFIG.darkFraction[1] - CONFIG.darkFraction[0]);
+    const s = new Array(m).fill(1);                      // 1 = lit
+    const idx = [...Array(m).keys()];
+    for (let k = m - 1; k > 0; k--) { const r = Math.floor(rnd() * (k + 1)); [idx[k], idx[r]] = [idx[r], idx[k]]; }
+    const scatter = t < 60;                              // first try fully random single dark tiles
+    const stamps = scatter ? 0 : Math.max(1, Math.round(m * f / 3.8));
+    if (scatter) for (let j = 0; j < Math.round(m * f); j++) s[idx[j]] = 0;
+    for (let j = 0; j < stamps; j++) {                   // fallback: plus-shaped dark spots
+      const i = idx[j], y = (i / n) | 0, x = i % n;
+      s[i] ^= 1;
+      if (y > 0) s[i - n] ^= 1; if (y < n - 1) s[i + n] ^= 1;
+      if (x > 0) s[i - 1] ^= 1; if (x < n - 1) s[i + 1] ^= 1;
+    }
+    if (s.every(v => !v)) continue;
+    const sol = solve(s, n);
+    if (!sol) continue;
+    const p = sol.reduce((a, b) => a + b, 0);
+    if (p >= (CONFIG.minPar[n] || 5)) return { s, p };
+    if (!fallback || p > fallback.p) fallback = { s, p };
+  }
+  return fallback;
+}
+
+/* ===== AUDIO ===== */
+let ctx = null;
+function ac() { try { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); if (ctx.state === 'suspended') ctx.resume(); } catch (e) { ctx = null; } return ctx; }
+function popSound() {            // soft bubble pop
+  const c = ac(); if (!c || !sound) return; const t = c.currentTime;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(700 + Math.random() * 120, t);
+  o.frequency.exponentialRampToValueAtTime(140, t + 0.14);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.35, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.2);
+  // tiny airy burst
+  const len = c.sampleRate * 0.05, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3;
+  const nsrc = c.createBufferSource(), bp = c.createBiquadFilter(), ng = c.createGain();
+  nsrc.buffer = buf; bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 1.2; ng.gain.value = 0.12;
+  nsrc.connect(bp).connect(ng).connect(c.destination); nsrc.start(t);
+}
+function onSound() {             // gentle glow-up chime
+  const c = ac(); if (!c || !sound) return; const t = c.currentTime;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(440, t); o.frequency.exponentialRampToValueAtTime(760, t + 0.18);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.32);
+}
+function winSound() {
+  const c = ac(); if (!c || !sound) return;
+  [523, 659, 784, 1047].forEach((f, i) => {
+    const t = c.currentTime + i * 0.12, o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.15, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    o.connect(g).connect(c.destination); o.start(t); o.stop(t + 0.65);
+  });
+}
+
+/* ===== STORAGE (best scores) ===== */
+const bestKey = n => 'lightsoff-best-' + n;
+function getBest(n) { try { return JSON.parse(localStorage.getItem(bestKey(n))); } catch (e) { return null; } }
+function setBest(n, v) { try { localStorage.setItem(bestKey(n), JSON.stringify(v)); } catch (e) {} }
+
+/* ===== RENDER ===== */
+function build() {
+  boardEl.innerHTML = '';
+  boardEl.style.gridTemplateColumns = `repeat(${N},1fr)`;
+  boardEl.style.width = `min(94vw, ${CONFIG.boardPx[N] || 480}px)`;
+  boardEl.style.gap = `${CONFIG.gapPx[N] || 6}px`;
+  for (let i = 0; i < N * N; i++) {
+    const b = document.createElement('button');
+    b.className = 'cell'; b.dataset.i = i; b.setAttribute('aria-label', 'tile ' + (i + 1));
+    b.addEventListener('pointerdown', e => { e.preventDefault(); press(i); });
+    boardEl.appendChild(b);
+  }
+  paint();
+}
+function paint() {
+  [...boardEl.children].forEach((el, i) => el.className = 'cell ' + (grid[i] ? 'on' : 'off'));
+  $('moves').textContent = moves;
+  $('par').textContent = par;
+  const b = getBest(N); $('best').textContent = b ? b.moves : '–';
+}
+function bubble(i) {
+  const el = boardEl.children[i]; if (!el) return;
+  const s = document.createElement('span'); s.className = 'bubble';
+  el.appendChild(s); setTimeout(() => s.remove(), 460);
+}
+
+/* ===== GAME FLOW ===== */
+function press(i) {
+  if (done) return;
+  if (!timer) { t0 = Date.now(); timer = setInterval(tick, 500); }
+  const y = (i / N) | 0, x = i % N, targets = [i];
+  if (y > 0) targets.push(i - N); if (y < N - 1) targets.push(i + N);
+  if (x > 0) targets.push(i - 1); if (x < N - 1) targets.push(i + 1);
+  let wentDark = 0;
+  targets.forEach(k => { if (grid[k]) { wentDark++; bubble(k); } grid[k] ^= 1; });
+  wentDark >= targets.length / 2 ? popSound() : onSound();
+  moves++; clearHint(); paint();
+  if (grid.every(v => v === 0)) win();
+}
+function tick() {
+  const s = Math.floor((Date.now() - t0) / 1000);
+  $('time').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function stopTimer() { clearInterval(timer); timer = null; }
+function win() {
+  done = true; stopTimer(); setTimeout(winSound, 150);
+  const secs = Math.floor((Date.now() - t0) / 1000);
+  const b = getBest(N);
+  let msg = `${moves} moves (par ${par}) in ${$('time').textContent}.`;
+  if (moves === par) msg += ' Perfect!';
+  if (!b || moves < b.moves || (moves === b.moves && secs < b.secs)) { setBest(N, { moves, secs }); msg += ' New best!'; }
+  $('winText').textContent = msg; $('win').classList.add('show'); paint();
+  $('xWin').href = 'https://x.com/intent/post?text=' + encodeURIComponent(shareText(true));
+}
+
+/* ===== ROOMS & IDs ===== */
+const SIZE_NAME = { 6: 'Normal', 9: 'Difficult', 13: 'Very difficult', 19: 'Nightmare' };
+function loadRoom(n, code, daily = false) {
+  N = n; isDaily = daily; roomId = `${n}-${code}`;
+  $('size').value = String(n);
+  const g = generate(n, code);
+  start = g.s.slice(); par = g.p;
+  $('roomId').textContent = roomId + (daily ? ' 📅' : '');
+  try { history.replaceState(null, '', '#' + roomId); } catch (e) { try { location.hash = roomId; } catch (e2) {} }
+  reset(true);
+}
+function newRoom() { loadRoom(+$('size').value, randomCode()); }
+function playId() {
+  const p = parseId($('roomInput').value);
+  if (!p) return toast('Room ID looks like 9-K7QX2M');
+  $('roomInput').value = ''; loadRoom(p.n, p.code);
+}
+function dailyRoom() { loadRoom(+$('size').value, dailyCode(), true); }
+
+/* ===== CHALLENGE SHARING ===== */
+const roomLink = () => location.href.split('#')[0] + '#' + roomId;
+function shareText(solved) {
+  const head = `🌙 ${CONFIG.gameName}${isDaily ? ' · Daily' : ''} · ${N}×${N} ${SIZE_NAME[N]}`;
+  if (!solved) return `${head}\nRoom ${roomId} · par ${par}\nCan you turn off every light in par? 💡\n${roomLink()}`;
+  const medal = moves === par ? '🏆 Perfect' : moves <= par * 1.25 ? '🥈' : '🥉';
+  const hintTxt = hintsUsed ? ` · ${hintsUsed} hint${hintsUsed > 1 ? 's' : ''}` : ' · no hints';
+  return `${head}\nRoom ${roomId}\n${medal} ${moves} moves (par ${par}) · ${$('time').textContent}${hintTxt}\nBeat me 👉 ${roomLink()}`;
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return toast('Copied — paste it anywhere'); } catch (e) {}
+  const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+  ta.remove(); toast(ok ? 'Copied — paste it anywhere' : 'Copy failed — room ID: ' + roomId);
+}
+let toastT = null;
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2200); }
+function reset(rebuild) {
+  grid = start.slice(); moves = 0; hintsUsed = 0; done = false; stopTimer();
+  $('time').textContent = '0:00'; $('win').classList.remove('show');
+  rebuild || boardEl.children.length !== N * N ? build() : paint();
+}
+function clearHint() { [...boardEl.children].forEach(el => el.classList.remove('hint')); }
+function hint() {
+  if (done) return;
+  const sol = solve(grid, N); if (!sol) return;
+  clearHint(); hintsUsed++;
+  const i = sol.findIndex(v => v); if (i >= 0) boardEl.children[i].classList.add('hint');
+}
+
+$('newBtn').onclick = newRoom;
+$('again').onclick = newRoom;
+$('size').onchange = () => (isDaily ? dailyRoom() : newRoom());
+$('resetBtn').onclick = () => reset(false);
+$('hintBtn').onclick = hint;
+$('soundBtn').onclick = () => { sound = !sound; $('soundBtn').textContent = sound ? '🔊' : '🔇'; };
+$('playIdBtn').onclick = playId;
+$('roomInput').onkeydown = e => { if (e.key === 'Enter') playId(); };
+$('dailyBtn').onclick = dailyRoom;
+$('shareBtn').onclick = () => copyText(shareText(false));
+$('copyWin').onclick = () => copyText(shareText(true));
+
+function fromHash() { const p = parseId(location.hash.slice(1)); if (p && `${p.n}-${p.code}` !== roomId) { loadRoom(p.n, p.code); return true; } return false; }
+window.addEventListener('hashchange', fromHash);
+fromHash() || newRoom();
+</script>
+</body>
+</html>
