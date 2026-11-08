@@ -1,5 +1,5 @@
 # 🌙 Turn Off the Lights
-A Lights Out–style logic puzzle. Tap a tile to flip it and its four neighbours — turn every light off.
+A Lights Out–style logic puzzle. Tap a tile to flip it and its four neighbours, and turn every light off to complete the game.
 
 ▶️ **Play:** https://kuifengzhao.github.io/lights-off/
 
